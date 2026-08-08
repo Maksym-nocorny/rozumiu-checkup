@@ -1,0 +1,6 @@
+{
+  "name": "rozumiu-checkup",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": { "test": "node tests/score.test.js", "build": "esbuild src/quiz.js --minify --outfile=dist/quiz.min.js && esbuild src/popup.js --minify --outfile=dist/popup.min.js" }
+}
