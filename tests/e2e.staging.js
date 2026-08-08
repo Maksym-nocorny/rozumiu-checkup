@@ -105,7 +105,8 @@ async function answerAll(page, values) {
     ok('P: назад показує вибране', await page
       .locator('[data-quiz="question"].is-active [data-quiz="scale-btn"][data-value="7"]')
       .evaluate((el) => el.classList.contains('is-selected')));
-    await page.click('[data-quiz="next"]');
+    await page.click('[data-quiz="next"]'); // Q1 → Q2 (відповідь 5 збережена)
+    await page.click('[data-quiz="next"]'); // Q2 → Q3, answerAll стартує з Q3
 
     // еталон з fixtures (Q1=7 уже стоїть, Q2=5 уже стоїть; заповнюємо решту)
     const mixed = { 1: 7, 2: 5, 3: 9, 4: 3, 5: 8, 6: 4, 7: 10, 8: 6, 9: 9, 10: 6, 11: 2, 12: 5, 13: 8, 14: 2, 15: 9, 16: 4, 17: 7, 18: 3, 19: 7, 20: 8, 21: 5, 22: 10, 23: 7 };

@@ -1,4 +1,4 @@
-/*! Rozumiu Wellbeing Check-up engine v1.0.2 | vanilla JS, config-driven */
+/*! Rozumiu Wellbeing Check-up engine v1.0.3 | vanilla JS, config-driven */
 (function () {
   'use strict';
 
@@ -101,7 +101,7 @@
     root.classList.add('is-lead');
 
     window.__rozumiuQuiz = {
-      version: '1.0.2',
+      version: '1.0.3',
       score: score,
       config: config,
       getState: function () { return JSON.parse(JSON.stringify(state)); }
@@ -399,7 +399,8 @@
       var set = function (n, v) {
         var el = form.querySelector('[name="' + n + '"]');
         if (!el) return;
-        if (v === null || v === undefined || v === '') { el.disabled = true; } else { el.value = v; }
+        // webflow.js серіалізує і disabled-інпути, тому порожні просто видаляємо
+        if (v === null || v === undefined || v === '') { el.parentNode.removeChild(el); } else { el.value = v; }
       };
       set('checkup-name', config.checkupName || '');
       set('contact-name', state.lead.name);
