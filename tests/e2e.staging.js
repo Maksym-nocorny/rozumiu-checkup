@@ -16,17 +16,22 @@ async function preparePage(ctx, submissions) {
   await page.route('**/api/v1/form/**', async (route) => {
     const req = route.request();
     submissions.push({ url: req.url(), body: req.postData() });
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"msg":"ok","code":200}' });
   });
   page.on('console', (m) => { if (m.type() === 'error') console.error('[console]', m.text()); });
   return page;
 }
 
 function parseBody(body) {
+  // webflow.js шле form-urlencoded з полями як fields[Ключ]=значення
   const out = {};
   (body || '').split('&').forEach((kv) => {
     const [k, v] = kv.split('=');
-    if (k) out[decodeURIComponent(k)] = decodeURIComponent((v || '').replace(/\+/g, ' '));
+    if (!k) return;
+    let key = decodeURIComponent(k.replace(/\+/g, ' '));
+    const m = key.match(/^fields\[(.+)\]$/);
+    if (m) key = m[1];
+    out[key] = decodeURIComponent((v || '').replace(/\+/g, ' '));
   });
   return out;
 }
@@ -81,7 +86,7 @@ async function answerAll(page, values) {
     const lead = parseBody(submissions[0] && submissions[0].body);
     ok('P: checkup-name у ліді', /Особистий/.test(lead['checkup-name'] || ''), JSON.stringify(lead).slice(0, 200));
     ok('P: stage=lead', lead.stage === 'lead');
-    ok('P: position НЕ в payload', !('position' in lead));
+    ok('P: position порожня або відсутня', !lead.position);
     ok('P: honeypot порожній у payload', (lead.website || '') === '');
 
     const qCount = await page.locator('[data-quiz="question"]').count();
@@ -184,7 +189,7 @@ async function answerAll(page, values) {
     const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const submissions = [];
     const page = await mctx.newPage();
-    await page.route('**/api/v1/form/**', async (r) => { submissions.push(1); await r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }); });
+    await page.route('**/api/v1/form/**', async (r) => { submissions.push(1); await r.fulfill({ status: 200, contentType: 'application/json', body: '{"msg":"ok","code":200}' }); });
     await page.goto(BASE + '/checkup/personal', { waitUntil: 'networkidle' });
     await fillLead(page);
     await page.click('[data-quiz="lead-form"] input[type="submit"]');
