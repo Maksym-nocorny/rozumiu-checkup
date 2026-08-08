@@ -1,4 +1,4 @@
-/*! Rozumiu Wellbeing Check-up engine v1.0.0 | vanilla JS, config-driven */
+/*! Rozumiu Wellbeing Check-up engine v1.0.1 | vanilla JS, config-driven */
 (function () {
   'use strict';
 
@@ -101,7 +101,7 @@
     root.classList.add('is-lead');
 
     window.__rozumiuQuiz = {
-      version: '1.0.0',
+      version: '1.0.1',
       score: score,
       config: config,
       getState: function () { return JSON.parse(JSON.stringify(state)); }
@@ -163,11 +163,34 @@
     return isNaN(v) ? 0 : v;
   }
 
+  // Webflow-реєстр форм не редагується headless: людські імена полів і форм
+  // ставимо в рантаймі ДО сабміту — payload і листи отримують читабельні ключі.
+  function normalizeLeadForm(root, form) {
+    form.setAttribute('data-name', 'Checkup Lead');
+    var email = form.querySelector('input[type="email"]');
+    if (email) email.name = 'contact-email';
+    var tel = form.querySelector('input[type="tel"]');
+    if (tel) tel.name = 'phone';
+    var pos = root.querySelector('[data-quiz="position-wrap"] input');
+    if (pos) pos.name = 'position';
+    var hp = root.querySelector('[data-quiz="hp-wrap"] input');
+    if (hp) hp.name = 'website';
+    var consent = root.querySelector('[data-quiz="consent-wrap"] input[type="checkbox"]');
+    if (consent) consent.name = 'consent';
+    // решта текстових полів поза wrap-ами: перше — імʼя, друге — компанія
+    var free = Array.prototype.filter.call(form.querySelectorAll('input[type="text"]'), function (el) {
+      return !el.closest('[data-quiz="position-wrap"]') && !el.closest('[data-quiz="hp-wrap"]');
+    });
+    if (free[0]) free[0].name = 'contact-name';
+    if (free[1]) free[1].name = 'company';
+  }
+
   function initLeadForm(root, config, state, dom) {
     var wrap = dom.leadFormWrap;
     if (!wrap) return;
     var form = wrap.querySelector('form');
     if (!form) return;
+    normalizeLeadForm(root, form);
 
     var byName = function (n) { return form.querySelector('[name="' + n + '"]'); };
     var checkupName = byName('checkup-name');
@@ -375,6 +398,7 @@
       var wrap = dom0(root, '[data-quiz="results-form"]');
       var form = wrap && wrap.querySelector('form');
       if (!form) { console.error('[quiz] results form missing'); return; }
+      form.setAttribute('data-name', 'Checkup Results');
       var set = function (n, v) {
         var el = form.querySelector('[name="' + n + '"]');
         if (!el) return;
