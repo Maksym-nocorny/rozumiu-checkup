@@ -1,4 +1,4 @@
-/*! Rozumiu Wellbeing Check-up engine v1.1.0 | vanilla JS, config-driven */
+/*! Rozumiu Wellbeing Check-up engine v1.1.1 | vanilla JS, config-driven */
 (function () {
   'use strict';
 
@@ -102,7 +102,7 @@
     root.classList.add('is-lead');
 
     window.__rozumiuQuiz = {
-      version: '1.1.0',
+      version: '1.1.1',
       score: score,
       config: config,
       getState: function () { return JSON.parse(JSON.stringify(state)); }
@@ -260,10 +260,11 @@
       if (sparse) {
         var legend = document.createElement('div');
         legend.setAttribute('data-quiz', 'scale-legend');
-        legend.textContent = labelKeys
-          .sort(function (a, b) { return a - b; })
-          .map(function (k) { return k + ' - ' + labels[k]; })
-          .join('    ');
+        labelKeys.sort(function (a, b) { return a - b; }).forEach(function (k) {
+          var span = document.createElement('span');
+          span.textContent = k + ' - ' + labels[k];
+          legend.appendChild(span);
+        });
         holder.parentNode.insertBefore(legend, holder.nextSibling);
       }
     });
