@@ -45,11 +45,17 @@ async function fillLead(page, { position } = {}) {
   await page.check('[data-quiz="lead-form"] [name="consent"]');
 }
 
-async function answerAll(page, values) {
-  // values: масив значень у порядку питань
+async function answerAll(page, values, milestoneAt, tag) {
+  // values: масив значень у порядку питань; milestoneAt: на якому кроці цього
+  // прогону очікуємо бейдж «половина шляху»
   for (let i = 0; i < values.length; i++) {
     const active = page.locator('[data-quiz="question"].is-active');
     await active.waitFor({ state: 'visible' });
+    if (milestoneAt) {
+      const vis = await page.locator('[data-quiz="milestone"]').isVisible();
+      if (i + 1 === milestoneAt) ok(`${tag}: milestone видно на середині`, vis);
+      if (i + 1 === milestoneAt + 1) ok(`${tag}: milestone зник далі`, !vis);
+    }
     await active.locator(`[data-quiz="scale-btn"][data-value="${values[i]}"]`).click();
     const next = page.locator('[data-quiz="next"]');
     if (i < values.length - 1) await next.click();
@@ -112,10 +118,17 @@ async function answerAll(page, values) {
     const mixed = { 1: 7, 2: 5, 3: 9, 4: 3, 5: 8, 6: 4, 7: 10, 8: 6, 9: 9, 10: 6, 11: 2, 12: 5, 13: 8, 14: 2, 15: 9, 16: 4, 17: 7, 18: 3, 19: 7, 20: 8, 21: 5, 22: 10, 23: 7 };
     const rest = [];
     for (let q = 3; q <= 23; q++) rest.push(mixed[q]);
-    await answerAll(page, rest);
+    await answerAll(page, rest, 10, 'P'); // Q12 = ceil(23/2), у цьому прогоні крок 10
 
     await page.locator('[data-quiz="result"][data-result-type="personal"]').waitFor({ state: 'visible', timeout: 8000 });
     ok('P: екран результату видно', true);
+    ok('P: followup банер видно', await page.locator('[data-quiz="result"][data-result-type="personal"] [data-result="followup"]').isVisible());
+    const dTitle0 = (await page.locator('[data-result="detail-title"]').innerText()).trim();
+    ok('P: деталь стартує з найгіршої зони', dTitle0 === "Здоров'я - 4.0", dTitle0);
+    await page.locator('[data-result="sphere-row"]', { has: page.locator('[data-sphere-key]:text-is("meaning")') }).click();
+    const dTitle1 = (await page.locator('[data-result="detail-title"]').innerText()).trim();
+    ok('P: клік по плитці міняє деталь', dTitle1 === 'Сенс - 9.0', dTitle1);
+    ok('P: опис у деталі з CMS', (await page.locator('[data-result="detail-body"]').innerText()).includes('Навіщо я роблю те, що роблю'));
 
     const expected = {
       'positive-emotions': ['9.0', 'green'], engagement: ['6.0', 'yellow'],
@@ -169,8 +182,9 @@ async function answerAll(page, values) {
     const lbl = await page.locator('[data-quiz="question"].is-active [data-quiz="scale-btn"][data-value="0"] [data-scale="label"]').innerText();
     ok('T: підпис «ніколи» на 0', lbl.trim() === 'ніколи', lbl);
 
-    await answerAll(page, Array(20).fill(4));
+    await answerAll(page, Array(20).fill(4), 10, 'T'); // Q10 = ceil(20/2)
     await page.locator('[data-quiz="result"][data-result-type="team"]').waitFor({ state: 'visible', timeout: 8000 });
+    ok('T: followup банер видно', await page.locator('[data-quiz="result"][data-result-type="team"] [data-result="followup"]').isVisible());
     const total = (await page.locator('[data-result="total-score"]').innerText()).trim();
     ok('T: 80 із 80', total === '80 із 80', total);
     const band = (await page.locator('[data-result="band-title"]').innerText()).trim();
