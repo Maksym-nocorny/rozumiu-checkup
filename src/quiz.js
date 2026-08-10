@@ -1,4 +1,4 @@
-/*! Rozumiu Wellbeing Check-up engine v1.0.5 | vanilla JS, config-driven */
+/*! Rozumiu Wellbeing Check-up engine v1.1.0 | vanilla JS, config-driven */
 (function () {
   'use strict';
 
@@ -97,11 +97,12 @@
 
     initLeadForm(root, config, state, dom);
     buildScales(root, config, state, dom);
+    buildMilestone(root, config, dom);
     initNav(config, state, dom);
     root.classList.add('is-lead');
 
     window.__rozumiuQuiz = {
-      version: '1.0.5',
+      version: '1.1.0',
       score: score,
       config: config,
       getState: function () { return JSON.parse(JSON.stringify(state)); }
@@ -285,8 +286,23 @@
     }
   }
 
+  // сервісність від клієнтки: підбадьорення на середині тесту
+  function buildMilestone(root, config, dom) {
+    var text = config.ui && config.ui.milestoneText;
+    var progress = root.querySelector('[data-quiz="progress"]');
+    if (!text || !progress) return;
+    var el = document.createElement('div');
+    el.setAttribute('data-quiz', 'milestone');
+    el.textContent = text;
+    progress.parentNode.insertBefore(el, progress.nextSibling);
+    dom.milestone = el;
+  }
+
   function goTo(i, config, state, dom) {
     state.qIndex = i;
+    if (dom.milestone) {
+      dom.milestone.classList.toggle('is-visible', i + 1 === Math.ceil(dom.questions.length / 2));
+    }
     dom.questions.forEach(function (q, idx) {
       var active = idx === i;
       q.classList.toggle('is-active', active);
@@ -353,6 +369,7 @@
     section.classList.add('is-active');
 
     if (computed.type === 'personal') {
+      var entries = [];
       computed.spheres.forEach(function (s) {
         var row = null;
         root.querySelectorAll('[data-result="sphere-row"]').forEach(function (r) {
@@ -365,7 +382,9 @@
         if (scoreNode) scoreNode.textContent = fmtScore(s.score, config);
         var bar = row.querySelector('[data-result="sphere-bar"]');
         if (bar) bar.style.width = Math.round((s.score / config.scale.max) * 100) + '%';
+        entries.push({ row: row, s: s });
       });
+      initDetailPanel(root, section, config, entries);
       if (config.overallRow && config.overallRow.enabled && computed.overall !== null) {
         var overallRow = section.querySelector('[data-result="overall-row"]');
         if (overallRow) {
@@ -391,6 +410,40 @@
       }
       if (computed.bandGap) console.error('[quiz] total=' + computed.total + ' hit no band; nearest used');
     }
+    var fu = section.querySelector('[data-result="followup"]');
+    if (fu && config.ui && config.ui.followupText) {
+      fu.textContent = config.ui.followupText;
+      fu.classList.add('is-visible');
+    }
+  }
+
+  // плитки-дашборд: клік по сфері відкриває опис у деталь-панелі,
+  // стартово розкрита сфера з найгіршою зоною
+  function initDetailPanel(root, section, config, entries) {
+    var detail = section.querySelector('[data-result="detail"]');
+    if (!detail || !entries.length) return;
+    var titleNode = detail.querySelector('[data-result="detail-title"]');
+    var bodyNode = detail.querySelector('[data-result="detail-body"]');
+    var select = function (e) {
+      entries.forEach(function (x) { x.row.classList.remove('is-active'); });
+      e.row.classList.add('is-active');
+      if (titleNode) titleNode.textContent = sphereNameFromDom(root, e.s.key) + ' - ' + fmtScore(e.s.score, config);
+      var src = e.row.querySelector('[data-result="sphere-text"]');
+      if (bodyNode) bodyNode.innerHTML = src ? src.innerHTML : '';
+      detail.classList.add('is-visible');
+    };
+    entries.forEach(function (e) {
+      e.row.setAttribute('tabindex', '0');
+      e.row.setAttribute('role', 'button');
+      e.row.addEventListener('click', function () { select(e); });
+      e.row.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); select(e); }
+      });
+    });
+    var rank = { red: 0, orange: 1, yellow: 2, green: 3 };
+    var start = entries[0];
+    entries.forEach(function (e) { if (rank[e.s.zone] < rank[start.s.zone]) start = e; });
+    select(start);
   }
 
   function sphereNameFromDom(root, key) {
