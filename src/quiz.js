@@ -1,4 +1,4 @@
-/*! Rozumiu Wellbeing Check-up engine v1.0.3 | vanilla JS, config-driven */
+/*! Rozumiu Wellbeing Check-up engine v1.0.4 | vanilla JS, config-driven */
 (function () {
   'use strict';
 
@@ -101,7 +101,7 @@
     root.classList.add('is-lead');
 
     window.__rozumiuQuiz = {
-      version: '1.0.3',
+      version: '1.0.4',
       score: score,
       config: config,
       getState: function () { return JSON.parse(JSON.stringify(state)); }
@@ -180,6 +180,10 @@
     });
     rename(free[0], 'contact-name');
     rename(free[1], 'company');
+    // дефолтний Webflow-плейсхолдер виглядає як недоробка
+    form.querySelectorAll('input').forEach(function (el) {
+      if (el.placeholder === 'Example Text') el.placeholder = '';
+    });
   }
 
   function initLeadForm(root, config, state, dom) {
