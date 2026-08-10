@@ -1,4 +1,4 @@
-/*! Rozumiu Wellbeing Check-up engine v1.0.4 | vanilla JS, config-driven */
+/*! Rozumiu Wellbeing Check-up engine v1.0.5 | vanilla JS, config-driven */
 (function () {
   'use strict';
 
@@ -101,7 +101,7 @@
     root.classList.add('is-lead');
 
     window.__rozumiuQuiz = {
-      version: '1.0.4',
+      version: '1.0.5',
       score: score,
       config: config,
       getState: function () { return JSON.parse(JSON.stringify(state)); }
@@ -235,6 +235,10 @@
     var tpl = dom.scaleTemplate;
     if (!tpl) { console.error('[quiz] no scale button template'); return; }
     var labels = (config.scale && config.scale.labels) || {};
+    var labelKeys = Object.keys(labels);
+    // підписані лише крайні значення (personal 0/10) → легенда під шкалою,
+    // щоб пігулки лишались однакової ширини; підписи на всіх (team) → у кнопках
+    var sparse = labelKeys.length > 0 && labelKeys.length * 2 < (config.scale.max - config.scale.min + 1);
     dom.questions.forEach(function (q) {
       var holder = q.querySelector('[data-quiz="scale"]');
       if (!holder) return;
@@ -245,12 +249,21 @@
           var labNode = btn.querySelector('[data-scale="label"]');
           var label = labels[String(val)] || '';
           if (valNode) valNode.textContent = String(val);
-          if (labNode) labNode.textContent = label;
+          if (labNode) labNode.textContent = sparse ? '' : label;
           btn.setAttribute('data-value', String(val));
           btn.setAttribute('aria-label', label ? val + ' - ' + label : String(val));
           btn.addEventListener('click', function () { onSelect(q, val, config, state, dom); });
           holder.appendChild(btn);
         })(v);
+      }
+      if (sparse) {
+        var legend = document.createElement('div');
+        legend.setAttribute('data-quiz', 'scale-legend');
+        legend.textContent = labelKeys
+          .sort(function (a, b) { return a - b; })
+          .map(function (k) { return k + ' - ' + labels[k]; })
+          .join('    ');
+        holder.parentNode.insertBefore(legend, holder.nextSibling);
       }
     });
   }
