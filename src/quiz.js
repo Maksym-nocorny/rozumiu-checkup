@@ -1,4 +1,4 @@
-/*! Rozumiu Wellbeing Check-up engine v1.1.1 | vanilla JS, config-driven */
+/*! Rozumiu Wellbeing Check-up engine v1.2.0 | vanilla JS, config-driven */
 (function () {
   'use strict';
 
@@ -102,7 +102,7 @@
     root.classList.add('is-lead');
 
     window.__rozumiuQuiz = {
-      version: '1.1.1',
+      version: '1.2.0',
       score: score,
       config: config,
       getState: function () { return JSON.parse(JSON.stringify(state)); }
@@ -288,13 +288,27 @@
   }
 
   // сервісність від клієнтки: підбадьорення на середині тесту
+  function withIllustration(el, imgUrl, text) {
+    el.textContent = '';
+    if (imgUrl) {
+      var pic = document.createElement('img');
+      pic.src = imgUrl;
+      pic.alt = '';
+      pic.setAttribute('aria-hidden', 'true');
+      el.appendChild(pic);
+    }
+    var span = document.createElement('span');
+    span.textContent = text;
+    el.appendChild(span);
+  }
+
   function buildMilestone(root, config, dom) {
     var text = config.ui && config.ui.milestoneText;
     var progress = root.querySelector('[data-quiz="progress"]');
     if (!text || !progress) return;
     var el = document.createElement('div');
     el.setAttribute('data-quiz', 'milestone');
-    el.textContent = text;
+    withIllustration(el, config.ui.milestoneImage, text);
     progress.parentNode.insertBefore(el, progress.nextSibling);
     dom.milestone = el;
   }
@@ -413,7 +427,7 @@
     }
     var fu = section.querySelector('[data-result="followup"]');
     if (fu && config.ui && config.ui.followupText) {
-      fu.textContent = config.ui.followupText;
+      withIllustration(fu, config.ui.followupImage, config.ui.followupText);
       fu.classList.add('is-visible');
     }
   }
