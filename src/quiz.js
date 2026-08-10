@@ -1,4 +1,4 @@
-/*! Rozumiu Wellbeing Check-up engine v1.2.0 | vanilla JS, config-driven */
+/*! Rozumiu Wellbeing Check-up engine v1.2.1 | vanilla JS, config-driven */
 (function () {
   'use strict';
 
@@ -102,7 +102,7 @@
     root.classList.add('is-lead');
 
     window.__rozumiuQuiz = {
-      version: '1.2.0',
+      version: '1.2.1',
       score: score,
       config: config,
       getState: function () { return JSON.parse(JSON.stringify(state)); }
@@ -304,12 +304,13 @@
 
   function buildMilestone(root, config, dom) {
     var text = config.ui && config.ui.milestoneText;
-    var progress = root.querySelector('[data-quiz="progress"]');
-    if (!text || !progress) return;
+    // під шкалою, перед навігацією: питання не зсувається між кроками
+    var nav = root.querySelector('[data-quiz="nav"]');
+    if (!text || !nav) return;
     var el = document.createElement('div');
     el.setAttribute('data-quiz', 'milestone');
     withIllustration(el, config.ui.milestoneImage, text);
-    progress.parentNode.insertBefore(el, progress.nextSibling);
+    nav.parentNode.insertBefore(el, nav);
     dom.milestone = el;
   }
 
