@@ -1,4 +1,4 @@
-/*! Rozumiu Wellbeing Check-up engine v1.3.2 | vanilla JS, config-driven */
+/*! Rozumiu Wellbeing Check-up engine v1.3.3 | vanilla JS, config-driven */
 (function () {
   'use strict';
 
@@ -96,6 +96,7 @@
     if (!dom) return;
 
     injectStyles();
+    applyConsent(root, config);
     initLeadForm(root, config, state, dom);
     buildScales(root, config, state, dom);
     buildGroupLabels(config, dom);
@@ -104,7 +105,7 @@
     root.classList.add('is-lead');
 
     window.__rozumiuQuiz = {
-      version: '1.3.2',
+      version: '1.3.3',
       score: score,
       config: config,
       getState: function () { return JSON.parse(JSON.stringify(state)); }
@@ -231,6 +232,27 @@
           pushEvent('checkup_start', config);
         }
       }).observe(done, { attributes: true, attributeFilter: ['style'] });
+    }
+  }
+
+  // Текст згоди на обробку даних і посилання на політику живуть у конфігу:
+  // юридичне формулювання міняється без правки сторінки.
+  function applyConsent(root, config) {
+    var cfg = config.ui && config.ui.consent;
+    var wrap = root.querySelector('[data-quiz="consent-wrap"]');
+    if (!cfg || !cfg.text || !wrap) return;
+    var label = wrap.querySelector('.w-form-label') || wrap.querySelector('span');
+    if (!label) return;
+    label.textContent = cfg.text;
+    if (cfg.linkText && cfg.linkUrl) {
+      label.appendChild(document.createTextNode(' '));
+      var a = document.createElement('a');
+      a.href = cfg.linkUrl;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = cfg.linkText;
+      a.setAttribute('data-quiz', 'consent-link');
+      label.appendChild(a);
     }
   }
 
@@ -556,6 +578,7 @@
   function injectStyles() {
     if (document.getElementById('rozumiu-quiz-styles')) return;
     var css = [
+      '[data-quiz="consent-link"]{text-decoration:underline;color:var(--cerulean-blue,#2f5bea)}',
       '[data-quiz="group-label"]{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--cerulean-blue,#2f5bea);margin-bottom:8px}',
       '[data-result="outro"]{margin-top:36px;display:flex;flex-direction:column;gap:28px}',
       '[data-outro]{background:var(--wild-sand,#f6f5f3);border-radius:20px;padding:24px}',

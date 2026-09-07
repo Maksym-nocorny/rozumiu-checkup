@@ -110,7 +110,12 @@
     "milestoneText": "Половина шляху пройдено! Ще трохи - і ви побачите результати.",
     "milestoneImage": "https://cdn.prod.website-files.com/66c4727995c0791bec5a55dc/685bed0ff1477063eb5e8147_Group%201-p-500.avif",
     "followupText": "Тест пройдено! Відповіді вашої команди вже у нас - ми звʼяжемося з вами найближчим часом.",
-    "followupImage": "https://cdn.prod.website-files.com/66c4727995c0791bec5a55dc/682afa45e1e3259da6df38fe_motivation_icon.avif"
+    "followupImage": "https://cdn.prod.website-files.com/66c4727995c0791bec5a55dc/682afa45e1e3259da6df38fe_motivation_icon.avif",
+    "consent": {
+      "text": "Погоджуюсь на обробку моїх персональних даних відповідно до",
+      "linkText": "Політики конфіденційності",
+      "linkUrl": "/privacy-policy"
+    }
   },
   "outro": [
     {
