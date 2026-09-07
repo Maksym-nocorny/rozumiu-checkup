@@ -1,4 +1,4 @@
-/*! Rozumiu Wellbeing Check-up engine v1.3.0 | vanilla JS, config-driven */
+/*! Rozumiu Wellbeing Check-up engine v1.3.1 | vanilla JS, config-driven */
 (function () {
   'use strict';
 
@@ -104,7 +104,7 @@
     root.classList.add('is-lead');
 
     window.__rozumiuQuiz = {
-      version: '1.3.0',
+      version: '1.3.1',
       score: score,
       config: config,
       getState: function () { return JSON.parse(JSON.stringify(state)); }
@@ -377,6 +377,11 @@
     renderResult(root, config, computed);
     root.classList.remove('is-quiz');
     root.classList.add('is-result');
+    // навбар сайту липкий: без відступу він накриває заголовок результату
+    try {
+      var top = root.getBoundingClientRect().top + (window.pageYOffset || 0) - 110;
+      window.scrollTo({ top: top > 0 ? top : 0, behavior: 'smooth' });
+    } catch (e) { /* старі браузери переживуть без прокрутки */ }
     pushEvent('checkup_complete', config);
     submitResults(root, config, state, computed);
   }
@@ -567,6 +572,7 @@
       '[data-outro-map] th{font-weight:600;background:var(--gallery,#e6e6e6)}',
       '[data-outro-map] tr:last-child td{border-bottom:0}',
       '[data-outro-map] td:nth-child(n+3){width:22%;height:34px}',
+      '[data-outro-map] td:nth-child(n+3):after{content:"";display:block;width:18px;height:18px;border:1px solid var(--gallery,#c9c9c9);border-radius:4px}',
       '[data-result="print"]{display:inline-block;background:var(--sunglow,#ffcb2f);border:0;border-radius:100px;padding:14px 28px;font-size:16px;font-weight:600;cursor:pointer}',
       '@media print{',
       '  [data-quiz="screen-intro"],[data-quiz="screen-quiz"],[data-result="cta"],[data-result="home-link"],[data-result="print"],[data-result="followup"],nav,.navbar,footer,.w-nav{display:none!important}',
@@ -575,7 +581,8 @@
       '  [data-result="detail"]{display:none!important}',
       '  [data-result="sphere-row"] [data-result="sphere-text"]{display:block!important;font-size:13px;margin-top:6px}',
       '  [data-result="rows"] .w-dyn-items{display:block!important}',
-      '  [data-outro-map] td:nth-child(n+3):after{content:"";display:block;width:18px;height:18px;border:1px solid #999;border-radius:4px}',
+      '  [data-outro="print"]{display:none!important}',
+      '  [data-outro-map] td:nth-child(n+3):after{border-color:#999}',
       '}'
     ].join('\n');
     var tag = document.createElement('style');

@@ -96,10 +96,10 @@ async function answerAll(page, values, milestoneAt, tag) {
     ok('P: honeypot порожній у payload', (lead.website || '') === '');
 
     const qCount = await page.locator('[data-quiz="question"]').count();
-    ok('P: 23 питання після фільтрації', qCount === 23, 'got ' + qCount);
+    ok('P: 22 питання після фільтрації', qCount === 22, 'got ' + qCount);
     const firstQ = await page.locator('[data-quiz="question"].is-active [data-quiz="question-text"]').innerText();
     ok('P: текст Q1 з CMS', firstQ.includes('просуваєтеся до своїх цілей'));
-    ok('P: лічильник кроку', (await page.locator('[data-quiz="step-counter"]').innerText()).trim() === '1 із 23');
+    ok('P: лічильник кроку', (await page.locator('[data-quiz="step-counter"]').innerText()).trim() === '1 із 22');
     ok('P: next заблокований без відповіді', await page.locator('[data-quiz="next"]').isDisabled());
     ok('P: 11 кнопок шкали', (await page.locator('[data-quiz="question"].is-active [data-quiz="scale-btn"]').count()) === 11);
 
@@ -115,10 +115,10 @@ async function answerAll(page, values, milestoneAt, tag) {
     await page.click('[data-quiz="next"]'); // Q2 → Q3, answerAll стартує з Q3
 
     // еталон з fixtures (Q1=7 уже стоїть, Q2=5 уже стоїть; заповнюємо решту)
-    const mixed = { 1: 7, 2: 5, 3: 9, 4: 3, 5: 8, 6: 4, 7: 10, 8: 6, 9: 9, 10: 6, 11: 2, 12: 5, 13: 8, 14: 2, 15: 9, 16: 4, 17: 7, 18: 3, 19: 7, 20: 8, 21: 5, 22: 10, 23: 7 };
+    const mixed = { 1: 7, 2: 5, 3: 9, 4: 3, 5: 8, 6: 4, 7: 10, 8: 6, 9: 9, 10: 6, 11: 2, 12: 5, 13: 8, 14: 2, 15: 9, 16: 4, 17: 7, 18: 3, 19: 7, 20: 8, 21: 5, 22: 10 };
     const rest = [];
-    for (let q = 3; q <= 23; q++) rest.push(mixed[q]);
-    await answerAll(page, rest, 10, 'P'); // Q12 = ceil(23/2), у цьому прогоні крок 10
+    for (let q = 3; q <= 22; q++) rest.push(mixed[q]);
+    await answerAll(page, rest, 9, 'P'); // Q11 = ceil(22/2), у цьому прогоні крок 9
 
     await page.locator('[data-quiz="result"][data-result-type="personal"]').waitFor({ state: 'visible', timeout: 8000 });
     ok('P: екран результату видно', true);
@@ -151,8 +151,24 @@ async function answerAll(page, values, milestoneAt, tag) {
     ok('P: result-1 читабельний', /Позитивні емоції: 9\.0 \(зелена\)/.test(res['result-1'] || ''), res['result-1']);
     ok('P: result-7 негативні', /Негативні емоції: 3\.0 \(жовта\)/.test(res['result-7'] || ''), res['result-7']);
     ok('P: total-score відсутній', !('total-score' in res));
-    ok('P: answers-json валідний', (() => { try { const j = JSON.parse(res['answers-json']); return j.type === 'personal' && j.answers['23'] === 7; } catch (e) { return false; } })());
+    ok('P: answers-json валідний', (() => { try { const j = JSON.parse(res['answers-json']); return j.type === 'personal' && j.answers['22'] === 10 && !('23' in j.answers); } catch (e) { return false; } })());
     ok('P: контакти в результатах', res['contact-name'] === 'Тест Мехамен' && /test\+checkup/.test(res['contact-email'] || ''));
+
+    // ---- блоки з документа клієнтки під результатом ----
+    const outro = page.locator('[data-result="outro"]');
+    ok('P: блоки під результатом є', await outro.isVisible());
+    const blocks = await page.locator('[data-outro]').count();
+    ok('P: 5 блоків під результатом', blocks === 5, 'got ' + blocks);
+    ok('P: легенда зон із 3 пунктів', (await page.locator('[data-outro-list="legend"] li').count()) === 3);
+    ok('P: у легенді пояснено «навпаки»', (await page.locator('[data-outro="legend"] [data-outro-note]').innerText()).includes('усе навпаки'));
+    ok('P: блок «Що далі?»', (await page.locator('[data-outro="text"]').first().innerText()).includes('Що далі?'));
+    const mapRows = await page.locator('[data-outro-map] tr').count();
+    ok('P: карта добробуту на 8 сфер + шапка', mapRows === 9, 'got ' + mapRows);
+    const mapHealth = (await page.locator('[data-outro-map] tr', { hasText: "Здоров'я" }).innerText()).replace(/\s+/g, ' ');
+    ok('P: у карті бал сфери збігається з плиткою', mapHealth.includes('4.0'), mapHealth);
+    ok('P: кнопка друку є', await page.locator('[data-result="print"]').isVisible());
+    ok('P: рефлексія з 3 питань', (await page.locator('[data-outro-list="dash"] li').count()) === 3);
+    ok('P: блоки не задубльовані', (await page.locator('[data-result="outro"]').count()) === 1);
 
     // подвійний клік по «Показати результат» не дає другого сабміту
     await page.waitForTimeout(300);
@@ -182,19 +198,32 @@ async function answerAll(page, values, milestoneAt, tag) {
     const lbl = await page.locator('[data-quiz="question"].is-active [data-quiz="scale-btn"][data-value="0"] [data-scale="label"]').innerText();
     ok('T: підпис «ніколи» на 0', lbl.trim() === 'ніколи', lbl);
 
+    // innerText віддає текст уже з CSS-трансформацією (uppercase), тому беремо textContent
+    const grp = (await page.locator('[data-quiz="question"].is-active [data-quiz="group-label"]').evaluate((el) => el.textContent)).trim();
+    ok('T: група над першим твердженням', grp === 'Енергія', grp);
+    const grpAll = await page.locator('[data-quiz="group-label"]').count();
+    ok('T: підпис групи на кожному твердженні', grpAll === 20, 'got ' + grpAll);
+
     await answerAll(page, Array(20).fill(4), 10, 'T'); // Q10 = ceil(20/2)
     await page.locator('[data-quiz="result"][data-result-type="team"]').waitFor({ state: 'visible', timeout: 8000 });
     ok('T: followup банер видно', await page.locator('[data-quiz="result"][data-result-type="team"] [data-result="followup"]').isVisible());
     const total = (await page.locator('[data-result="total-score"]').innerText()).trim();
     ok('T: 80 із 80', total === '80 із 80', total);
     const band = (await page.locator('[data-result="band-title"]').innerText()).trim();
-    ok('T: band 61–80', band === 'У команді помітні системні труднощі', band);
+    ok('T: band 67-80', band === 'Висока ймовірність, що команда працює в умовах тривалого психологічного навантаження', band);
     ok('T: зона червона', await page.locator('[data-quiz="result"][data-result-type="team"]').evaluate((el) => el.classList.contains('is-zone-red')));
+
+    const tBlocks = await page.locator('[data-quiz="result"][data-result-type="team"] [data-outro]').count();
+    ok('T: 3 блоки під результатом', tBlocks === 3, 'got ' + tBlocks);
+    ok('T: питання для роздумів', (await page.locator('[data-quiz="result"][data-result-type="team"] [data-outro]').first().innerText()).includes('Питання для роздумів'));
+    ok('T: пропозиція безкоштовної зустрічі', (await page.locator('[data-quiz="result"][data-result-type="team"] [data-result="outro"]').innerText()).includes('30-хвилинну онлайн-зустріч'));
+    ok('T: карти добробуту в командному немає', (await page.locator('[data-quiz="result"][data-result-type="team"] [data-outro-map]').count()) === 0);
+    ok('T: кнопка друку є', await page.locator('[data-quiz="result"][data-result-type="team"] [data-result="print"]').isVisible());
 
     await page.waitForTimeout(1200);
     const res = parseBody(submissions[1] && submissions[1].body);
     ok('T: total-score у payload', res['total-score'] === '80 із 80', res['total-score']);
-    ok('T: band-title у payload', res['band-title'] === 'У команді помітні системні труднощі');
+    ok('T: band-title у payload', res['band-title'] === 'Висока ймовірність, що команда працює в умовах тривалого психологічного навантаження');
     ok('T: result-1 відсутній', !('result-1' in res));
     await page.close();
   }
