@@ -1,4 +1,4 @@
-/*! Rozumiu Wellbeing Check-up engine v1.2.1 | vanilla JS, config-driven */
+/*! Rozumiu Wellbeing Check-up engine v1.3.0 | vanilla JS, config-driven */
 (function () {
   'use strict';
 
@@ -95,14 +95,16 @@
     var dom = collectDom(root, config);
     if (!dom) return;
 
+    injectStyles();
     initLeadForm(root, config, state, dom);
     buildScales(root, config, state, dom);
+    buildGroupLabels(config, dom);
     buildMilestone(root, config, dom);
     initNav(config, state, dom);
     root.classList.add('is-lead');
 
     window.__rozumiuQuiz = {
-      version: '1.2.1',
+      version: '1.3.0',
       score: score,
       config: config,
       getState: function () { return JSON.parse(JSON.stringify(state)); }
@@ -431,6 +433,155 @@
       withIllustration(fu, config.ui.followupImage, config.ui.followupText);
       fu.classList.add('is-visible');
     }
+    buildOutro(root, section, config, computed);
+  }
+
+  // ---- блоки з документа клієнтки під результатом -------------------------
+  // Легенда зон, «Що далі?», карта добробуту, питання для роздумів, друк.
+  // Усе живе в config.outro[], тож тексти правляться в CMS без правки сторінки.
+  function buildOutro(root, section, config, computed) {
+    var blocks = config.outro;
+    if (!blocks || !blocks.length) return;
+    if (section.querySelector('[data-result="outro"]')) return;
+    var host = document.createElement('div');
+    host.setAttribute('data-result', 'outro');
+    blocks.forEach(function (b) {
+      var el = renderBlock(root, b, config, computed);
+      if (el) host.appendChild(el);
+    });
+    var cta = section.querySelector('[data-result="cta"]');
+    if (cta && cta.parentNode) cta.parentNode.insertBefore(host, cta);
+    else section.appendChild(host);
+  }
+
+  function renderBlock(root, b, config, computed) {
+    var box = document.createElement('div');
+    box.setAttribute('data-outro', b.type || 'text');
+    if (b.title) box.appendChild(el('h3', b.title));
+    if (b.intro) box.appendChild(el('p', b.intro));
+    (b.paragraphs || []).forEach(function (p) { box.appendChild(el('p', p)); });
+
+    if (b.type === 'legend') {
+      var lg = document.createElement('ul');
+      lg.setAttribute('data-outro-list', 'legend');
+      (b.items || []).forEach(function (it) {
+        var li = el('li', it.text);
+        li.className = 'is-zone-' + (it.zone || '');
+        lg.appendChild(li);
+      });
+      box.appendChild(lg);
+    } else if (b.type === 'map') {
+      box.appendChild(buildMap(root, b, config, computed));
+    } else if (b.type === 'print') {
+      var btn = el('button', b.label || 'Зберегти або роздрукувати');
+      btn.type = 'button';
+      btn.setAttribute('data-result', 'print');
+      btn.addEventListener('click', function () { window.print(); });
+      box.appendChild(btn);
+    }
+
+    if (b.items && b.type !== 'legend') {
+      var list = document.createElement(b.marker === 'number' ? 'ol' : 'ul');
+      list.setAttribute('data-outro-list', b.marker || 'dash');
+      b.items.forEach(function (t) { list.appendChild(el('li', t)); });
+      box.appendChild(list);
+    }
+    if (b.note) {
+      var n = el('p', b.note);
+      n.setAttribute('data-outro-note', '');
+      box.appendChild(n);
+    }
+    return box;
+  }
+
+  // «Моя карта добробуту»: рядки — сфери з їхніми балами, колонки — галочки,
+  // які людина ставить уже на роздруку.
+  function buildMap(root, b, config, computed) {
+    var cols = b.columns || [];
+    var table = document.createElement('table');
+    table.setAttribute('data-outro-map', '');
+    var head = document.createElement('tr');
+    head.appendChild(el('th', b.sphereLabel || 'Сфера'));
+    head.appendChild(el('th', b.scoreLabel || 'Мій бал'));
+    cols.forEach(function (c) { head.appendChild(el('th', c)); });
+    table.appendChild(head);
+    (computed.spheres || []).forEach(function (s) {
+      var tr = document.createElement('tr');
+      tr.className = 'is-zone-' + s.zone;
+      tr.appendChild(el('td', sphereNameFromDom(root, s.key)));
+      tr.appendChild(el('td', fmtScore(s.score, config)));
+      cols.forEach(function () { tr.appendChild(el('td', '')); });
+      table.appendChild(tr);
+    });
+    return table;
+  }
+
+  function el(tag, text) {
+    var n = document.createElement(tag);
+    if (text) n.textContent = text;
+    return n;
+  }
+
+  // Підписи груп над твердженнями командного тесту (Енергія, Комунікація...).
+  function buildGroupLabels(config, dom) {
+    var groups = config.groups;
+    if (!groups || !groups.length) return;
+    var byQ = {};
+    groups.forEach(function (g) {
+      (g.questions || []).forEach(function (q) { byQ[q] = g.name; });
+    });
+    dom.questions.forEach(function (q) {
+      var name = byQ[qOrder(q)];
+      if (!name) return;
+      var heading = q.querySelector('[data-quiz="question-text"]');
+      if (!heading) return;
+      var tag = el('div', name);
+      tag.setAttribute('data-quiz', 'group-label');
+      heading.parentNode.insertBefore(tag, heading);
+    });
+  }
+
+  // Верстка нових блоків і правила друку їдуть зі скриптом: сторінка про них
+  // не знає, і оновлення тексту в CMS не тягне за собою правку сайту.
+  function injectStyles() {
+    if (document.getElementById('rozumiu-quiz-styles')) return;
+    var css = [
+      '[data-quiz="group-label"]{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--cerulean-blue,#2f5bea);margin-bottom:8px}',
+      '[data-result="outro"]{margin-top:36px;display:flex;flex-direction:column;gap:28px}',
+      '[data-outro]{background:var(--wild-sand,#f6f5f3);border-radius:20px;padding:24px}',
+      '[data-outro] h3{margin:0 0 12px;font-size:20px;line-height:130%}',
+      '[data-outro] p{margin:0 0 10px;font-size:16px;line-height:150%}',
+      '[data-outro] p:last-child{margin-bottom:0}',
+      '[data-outro-list]{margin:8px 0 0;padding-left:20px}',
+      '[data-outro-list] li{margin-bottom:8px;line-height:150%}',
+      '[data-outro-list="legend"]{list-style:none;padding-left:0}',
+      '[data-outro-list="legend"] li{position:relative;padding-left:26px}',
+      '[data-outro-list="legend"] li:before{content:"";position:absolute;left:0;top:5px;width:14px;height:14px;border-radius:50%;background:var(--gallery,#e6e6e6)}',
+      '[data-outro-list="legend"] li.is-zone-green:before{background:#3fae6a}',
+      '[data-outro-list="legend"] li.is-zone-yellow:before{background:var(--sunglow,#ffcb2f)}',
+      '[data-outro-list="legend"] li.is-zone-orange:before{background:#f08a3c}',
+      '[data-outro-list="legend"] li.is-zone-red:before{background:#e5533d}',
+      '[data-outro-note]{margin-top:12px;font-size:15px;opacity:.8}',
+      '[data-outro-map]{width:100%;border-collapse:collapse;margin-top:8px;background:#fff;border-radius:12px;overflow:hidden}',
+      '[data-outro-map] th,[data-outro-map] td{padding:10px 12px;text-align:left;font-size:15px;border-bottom:1px solid var(--gallery,#e6e6e6)}',
+      '[data-outro-map] th{font-weight:600;background:var(--gallery,#e6e6e6)}',
+      '[data-outro-map] tr:last-child td{border-bottom:0}',
+      '[data-outro-map] td:nth-child(n+3){width:22%;height:34px}',
+      '[data-result="print"]{display:inline-block;background:var(--sunglow,#ffcb2f);border:0;border-radius:100px;padding:14px 28px;font-size:16px;font-weight:600;cursor:pointer}',
+      '@media print{',
+      '  [data-quiz="screen-intro"],[data-quiz="screen-quiz"],[data-result="cta"],[data-result="home-link"],[data-result="print"],[data-result="followup"],nav,.navbar,footer,.w-nav{display:none!important}',
+      '  [data-quiz="root"]{max-width:none}',
+      '  [data-outro]{background:none;padding:0;break-inside:avoid}',
+      '  [data-result="detail"]{display:none!important}',
+      '  [data-result="sphere-row"] [data-result="sphere-text"]{display:block!important;font-size:13px;margin-top:6px}',
+      '  [data-result="rows"] .w-dyn-items{display:block!important}',
+      '  [data-outro-map] td:nth-child(n+3):after{content:"";display:block;width:18px;height:18px;border:1px solid #999;border-radius:4px}',
+      '}'
+    ].join('\n');
+    var tag = document.createElement('style');
+    tag.id = 'rozumiu-quiz-styles';
+    tag.textContent = css;
+    document.head.appendChild(tag);
   }
 
   // плитки-дашборд: клік по сфері відкриває опис у деталь-панелі,
