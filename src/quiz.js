@@ -1,4 +1,4 @@
-/*! Rozumiu Wellbeing Check-up engine v1.3.1 | vanilla JS, config-driven */
+/*! Rozumiu Wellbeing Check-up engine v1.3.2 | vanilla JS, config-driven */
 (function () {
   'use strict';
 
@@ -104,7 +104,7 @@
     root.classList.add('is-lead');
 
     window.__rozumiuQuiz = {
-      version: '1.3.1',
+      version: '1.3.2',
       score: score,
       config: config,
       getState: function () { return JSON.parse(JSON.stringify(state)); }
@@ -379,9 +379,13 @@
     root.classList.add('is-result');
     // навбар сайту липкий: без відступу він накриває заголовок результату
     try {
-      var top = root.getBoundingClientRect().top + (window.pageYOffset || 0) - 110;
-      window.scrollTo({ top: top > 0 ? top : 0, behavior: 'smooth' });
-    } catch (e) { /* старі браузери переживуть без прокрутки */ }
+      var nav = document.querySelector('.navbar, .w-nav, nav');
+      var pad = (nav ? nav.getBoundingClientRect().height : 0) + 24;
+      var top = root.getBoundingClientRect().top + (window.pageYOffset || 0) - pad;
+      if (top < 0) top = 0;
+      try { window.scrollTo({ top: top, behavior: 'smooth' }); }
+      catch (e2) { window.scrollTo(0, top); }
+    } catch (e) { /* без прокрутки сторінка теж робоча */ }
     pushEvent('checkup_complete', config);
     submitResults(root, config, state, computed);
   }
@@ -454,8 +458,8 @@
       var el = renderBlock(root, b, config, computed);
       if (el) host.appendChild(el);
     });
-    var cta = section.querySelector('[data-result="cta"]');
-    if (cta && cta.parentNode) cta.parentNode.insertBefore(host, cta);
+    var anchor = section.querySelector('[data-result="cta"]') || section.querySelector('[data-result="home-link"]');
+    if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(host, anchor);
     else section.appendChild(host);
   }
 
@@ -511,8 +515,9 @@
     cols.forEach(function (c) { head.appendChild(el('th', c)); });
     table.appendChild(head);
     (computed.spheres || []).forEach(function (s) {
+      // колір рядка тут не ставимо: у карті поруч стоять сирі бали, і для
+      // reversed-сфер однакове число мало б протилежний колір
       var tr = document.createElement('tr');
-      tr.className = 'is-zone-' + s.zone;
       tr.appendChild(el('td', sphereNameFromDom(root, s.key)));
       tr.appendChild(el('td', fmtScore(s.score, config)));
       cols.forEach(function () { tr.appendChild(el('td', '')); });
