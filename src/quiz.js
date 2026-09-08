@@ -104,12 +104,47 @@
     initNav(config, state, dom);
     root.classList.add('is-lead');
 
+    // Перегляд готового результату за посиланням із листа команді (?r=7.5.9… -
+    // відповіді по порядку питань): нічого не відправляється, лише рендер.
+    var review = reviewAnswersFromUrl(config, dom);
+    if (review) {
+      state.answers = review;
+      state.phase = 'result';
+      state.resultsSubmitted = true;
+      renderResult(root, config, score(config, review));
+      root.classList.remove('is-lead');
+      root.classList.add('is-result');
+      root.classList.add('is-review');
+    }
+
     window.__rozumiuQuiz = {
-      version: '1.3.4',
+      version: '1.3.5',
       score: score,
       config: config,
       getState: function () { return JSON.parse(JSON.stringify(state)); }
     };
+  }
+
+  function reviewAnswersFromUrl(config, dom) {
+    try {
+      var r = new URLSearchParams(window.location.search).get('r');
+      if (!r) return null;
+      var parts = r.split('.');
+      var answers = {}, okCount = 0;
+      dom.questions.forEach(function (q) {
+        var order = qOrder(q);
+        var v = parseInt(parts[order - 1], 10);
+        if (!isNaN(v) && v >= config.scale.min && v <= config.scale.max) { answers[order] = v; okCount++; }
+      });
+      return okCount === dom.questions.length ? answers : null;
+    } catch (e) { return null; }
+  }
+
+  function resultLink(state, dom) {
+    var vals = [];
+    dom.questions.forEach(function (q) { var o = qOrder(q); vals[o - 1] = state.answers[o]; });
+    var packed = vals.map(function (v) { return typeof v === 'number' ? v : ''; }).join('.');
+    return window.location.origin + window.location.pathname + '?r=' + packed;
   }
 
   function validate(config) {
@@ -412,7 +447,7 @@
       catch (e2) { window.scrollTo(0, top); }
     } catch (e) { /* без прокрутки сторінка теж робоча */ }
     pushEvent('checkup_complete', config);
-    submitResults(root, config, state, computed);
+    submitResults(root, config, state, computed, dom);
   }
 
   function renderResult(root, config, computed) {
@@ -594,6 +629,7 @@
     if (document.getElementById('rozumiu-quiz-styles')) return;
     var css = [
       '[data-quiz="consent-link"]{text-decoration:underline;color:var(--cerulean-blue,#2f5bea)}',
+      '.is-review [data-result="followup"]{display:none!important}',
       '[data-quiz="group-label"]{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--cerulean-blue,#2f5bea);margin-bottom:8px}',
       '[data-result="outro"]{margin-top:36px;display:flex;flex-direction:column;gap:28px}',
       '[data-outro]{background:var(--wild-sand,#f6f5f3);border-radius:20px;padding:24px}',
@@ -675,7 +711,7 @@
     return name;
   }
 
-  function submitResults(root, config, state, computed) {
+  function submitResults(root, config, state, computed, dom) {
     if (state.resultsSubmitted) return;
     state.resultsSubmitted = true;
     try {
@@ -705,10 +741,10 @@
         set('total-score', computed.total + ' із ' + computed.max);
         set('band-title', computed.band ? computed.band.title : '');
       }
-      set('answers-json', JSON.stringify({
-        v: config.version, type: config.type, checkup: config.checkupName,
-        answers: state.answers, computed: computed
-      }));
+      // Замість сирого JSON - посилання на цей самий результат: команда відкриває і друкує.
+      var linkInput = form.querySelector('[name="answers-json"]');
+      if (linkInput) { linkInput.name = 'result-link'; linkInput.setAttribute('data-name', 'result-link'); }
+      set('result-link', dom ? resultLink(state, dom) : null);
       var fail = wrap.querySelector('.w-form-fail');
       if (fail) {
         new MutationObserver(function () {

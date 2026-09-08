@@ -151,7 +151,8 @@ async function answerAll(page, values, milestoneAt, tag) {
     ok('P: result-1 читабельний', /Позитивні емоції: 9\.0 \(зелена\)/.test(res['result-1'] || ''), res['result-1']);
     ok('P: result-7 негативні', /Негативні емоції: 3\.0 \(жовта\)/.test(res['result-7'] || ''), res['result-7']);
     ok('P: total-score відсутній', !('total-score' in res));
-    ok('P: answers-json валідний', (() => { try { const j = JSON.parse(res['answers-json']); return j.type === 'personal' && j.answers['22'] === 10 && !('23' in j.answers); } catch (e) { return false; } })());
+    ok('P: сирого answers-json у сабміті немає', !('answers-json' in res));
+    ok('P: result-link веде на цей тест з відповідями', /\/checkup\/personal\?r=7\.5\.9\.3\.8\.4\.10\.6\.9\.6\.2\.5\.8\.2\.9\.4\.7\.3\.7\.8\.5\.10$/.test(res['result-link'] || ''), res['result-link']);
     ok('P: контакти в результатах', res['contact-name'] === 'Тест Мехамен' && /test\+checkup/.test(res['contact-email'] || ''));
 
     // ---- блоки з документа клієнтки під результатом ----
@@ -173,6 +174,24 @@ async function answerAll(page, values, milestoneAt, tag) {
     // подвійний клік по «Показати результат» не дає другого сабміту
     await page.waitForTimeout(300);
     ok('P: анти-дабл', submissions.length === 2);
+    await page.close();
+  }
+
+  // ---------- REVIEW LINK (лист команді → готовий результат без форм) ----------
+  {
+    const submissions = [];
+    const page = await preparePage(ctx, submissions);
+    await page.goto(BASE + '/checkup/personal?r=7.5.9.3.8.4.10.6.9.6.2.5.8.2.9.4.7.3.7.8.5.10', { waitUntil: 'networkidle' });
+    await page.locator('[data-quiz="result"][data-result-type="personal"]').waitFor({ state: 'visible', timeout: 8000 });
+    ok('R: за посиланням одразу результат', true);
+    ok('R: інтро сховано', !(await page.locator('[data-quiz="screen-intro"]').isVisible()));
+    ok('R: 8 плиток', (await page.locator('[data-result="sphere-row"]').count()) === 8);
+    const hRow = page.locator('[data-result="sphere-row"]', { has: page.locator('[data-sphere-key]:text-is("health")') });
+    ok('R: бали ті самі (Здоровʼя 4.0)', (await hRow.locator('[data-result="sphere-score"]').innerText()).trim() === '4.0');
+    ok('R: банер «відповіді у нас» схований', !(await page.locator('[data-result="followup"]').isVisible()));
+    await page.waitForTimeout(800);
+    ok('R: нічого не відправлено', submissions.length === 0, 'submissions=' + submissions.length);
+    ok('R: кнопка друку є', await page.locator('[data-result="print"]').isVisible());
     await page.close();
   }
 
