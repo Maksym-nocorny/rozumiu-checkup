@@ -1,4 +1,4 @@
-/*! Rozumiu Wellbeing Check-up engine v1.3.3 | vanilla JS, config-driven */
+/*! Rozumiu Wellbeing Check-up engine v1.3.4 | vanilla JS, config-driven */
 (function () {
   'use strict';
 
@@ -105,7 +105,7 @@
     root.classList.add('is-lead');
 
     window.__rozumiuQuiz = {
-      version: '1.3.3',
+      version: '1.3.4',
       score: score,
       config: config,
       getState: function () { return JSON.parse(JSON.stringify(state)); }
@@ -259,6 +259,8 @@
   function buildScales(root, config, state, dom) {
     var tpl = dom.scaleTemplate;
     if (!tpl) { console.error('[quiz] no scale button template'); return; }
+    // подвійне підключення скрипта не має дублювати кнопки шкали
+    if (root.getAttribute('data-quiz-scales') === 'built') return;
     var labels = (config.scale && config.scale.labels) || {};
     var labelKeys = Object.keys(labels);
     // підписані лише крайні значення (personal 0/10) → легенда під шкалою,
@@ -292,6 +294,7 @@
         holder.parentNode.insertBefore(legend, holder.nextSibling);
       }
     });
+    root.setAttribute('data-quiz-scales', 'built');
   }
 
   function onSelect(q, val, config, state, dom) {
@@ -464,7 +467,19 @@
       withIllustration(fu, config.ui.followupImage, config.ui.followupText);
       fu.classList.add('is-visible');
     }
+    applyCta(section, config);
     buildOutro(root, section, config, computed);
+  }
+
+  // CTA під результатом: адреса й підпис із config.ui.ctaUrl / ctaLabel,
+  // щоб командний тест міг вести на запис на зустріч без правки сторінки.
+  function applyCta(section, config) {
+    var ui = config.ui || {};
+    if (!ui.ctaUrl && !ui.ctaLabel) return;
+    section.querySelectorAll('[data-result="cta"]').forEach(function (a) {
+      if (ui.ctaUrl) a.setAttribute('href', ui.ctaUrl);
+      if (ui.ctaLabel) a.textContent = ui.ctaLabel;
+    });
   }
 
   // ---- блоки з документа клієнтки під результатом -------------------------
