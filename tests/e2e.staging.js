@@ -188,7 +188,7 @@ async function answerAll(page, values, milestoneAt, tag) {
     ok('R: 8 плиток', (await page.locator('[data-result="sphere-row"]').count()) === 8);
     const hRow = page.locator('[data-result="sphere-row"]', { has: page.locator('[data-sphere-key]:text-is("health")') });
     ok('R: бали ті самі (Здоровʼя 4.0)', (await hRow.locator('[data-result="sphere-score"]').innerText()).trim() === '4.0');
-    ok('R: банер «відповіді у нас» схований', !(await page.locator('[data-result="followup"]').isVisible()));
+    ok('R: банер «відповіді у нас» схований', !(await page.locator('[data-quiz="result"][data-result-type="personal"] [data-result="followup"]').isVisible()));
     await page.waitForTimeout(800);
     ok('R: нічого не відправлено', submissions.length === 0, 'submissions=' + submissions.length);
     ok('R: кнопка друку є', await page.locator('[data-result="print"]').isVisible());
