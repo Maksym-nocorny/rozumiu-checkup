@@ -1,6 +1,8 @@
 'use strict';
 /* E2E по staging: перехоплюємо Webflow form endpoint (нічого не летить у Forms/Make),
- * проходимо обидва тести, звіряємо скоринг і payload обох сабмітів. */
+ * проходимо обидва тести, звіряємо скоринг і payload обох сабмітів.
+ * Payload-ключі очікуються вже людські (addons v1.3.6: src/addons.js, підключений на сторінці);
+ * до публікації додаток можна підкинути з файла: ADDON_FILE=src/addons.js node tests/e2e.staging.js */
 const { chromium } = require('playwright-core');
 const assert = require('assert');
 
@@ -31,6 +33,8 @@ function parseBody(body) {
     let key = decodeURIComponent(k.replace(/\+/g, ' '));
     const m = key.match(/^fields\[(.+)\]$/);
     if (m) key = m[1];
+    // webflow.js кодує ім'я поля ще до $.param, тому кириличний ключ на дроті закодований двічі
+    if (/%[0-9A-Fa-f]{2}/.test(key)) { try { key = decodeURIComponent(key); } catch (e) { /* лишаємо як є */ } }
     out[key] = decodeURIComponent((v || '').replace(/\+/g, ' '));
   });
   return out;
@@ -66,6 +70,7 @@ async function answerAll(page, values, milestoneAt, tag) {
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  if (process.env.ADDON_FILE) await ctx.addInitScript({ path: process.env.ADDON_FILE });
 
   // ---------- PERSONAL ----------
   {
@@ -75,7 +80,7 @@ async function answerAll(page, values, milestoneAt, tag) {
 
     ok('P: intro видно', await page.locator('[data-quiz="screen-intro"]').isVisible());
     ok('P: quiz схований', !(await page.locator('[data-quiz="screen-quiz"]').isVisible()));
-    ok('P: заголовок з CMS', (await page.locator('[data-quiz="root"] h1').innerText()).includes('Як зараз почувається'));
+    ok('P: заголовок з CMS', (await page.locator('[data-quiz="root"] h1').innerText()).includes('Яким зараз відчувається'));
     ok('P: посада схована', !(await page.locator('[data-quiz="position-wrap"]').isVisible()));
 
     // невалідний email блокується браузером
@@ -90,10 +95,10 @@ async function answerAll(page, values, milestoneAt, tag) {
     await page.locator('[data-quiz="question"].is-active').waitFor({ timeout: 8000 });
     ok('P: лід-сабміт 1 шт', submissions.length === 1);
     const lead = parseBody(submissions[0] && submissions[0].body);
-    ok('P: checkup-name у ліді', /Особистий/.test(lead['checkup-name'] || ''), JSON.stringify(lead).slice(0, 200));
-    ok('P: stage=lead', lead.stage === 'lead');
-    ok('P: position порожня або відсутня', !lead.position);
-    ok('P: honeypot порожній у payload', (lead.website || '') === '');
+    ok('P: «Чек-ап» у ліді', /Особистий/.test(lead['Чек-ап'] || ''), JSON.stringify(lead).slice(0, 200));
+    ok('P: контакти під людськими ключами', lead['Імʼя'] === 'Тест Мехамен' && /test\+checkup/.test(lead['Email'] || '') && lead['Телефон'] === '+380501112233' && lead['Компанія'] === 'QA Dispatch', Object.keys(lead).join(','));
+    ok('P: службових полів немає (stage/consent/website/порожня посада)', !('stage' in lead) && !('consent' in lead) && !('website' in lead) && !('position' in lead) && !('Посада' in lead), Object.keys(lead).join(','));
+    ok('P: згода лишилась у формі після сабміту', await page.locator('[data-quiz="lead-form"] [name="consent"]').count() === 1);
 
     const qCount = await page.locator('[data-quiz="question"]').count();
     ok('P: 22 питання після фільтрації', qCount === 22, 'got ' + qCount);
@@ -148,12 +153,12 @@ async function answerAll(page, values, milestoneAt, tag) {
     await page.waitForTimeout(1200);
     ok('P: сабміт результатів пішов', submissions.length === 2, 'submissions=' + submissions.length);
     const res = parseBody(submissions[1] && submissions[1].body);
-    ok('P: result-1 читабельний', /Позитивні емоції: 9\.0 \(зелена\)/.test(res['result-1'] || ''), res['result-1']);
-    ok('P: result-7 негативні', /Негативні емоції: 3\.0 \(жовта\)/.test(res['result-7'] || ''), res['result-7']);
-    ok('P: total-score відсутній', !('total-score' in res));
-    ok('P: сирого answers-json у сабміті немає', !('answers-json' in res));
-    ok('P: result-link веде на цей тест з відповідями', /\/checkup\/personal\?r=7\.5\.9\.3\.8\.4\.10\.6\.9\.6\.2\.5\.8\.2\.9\.4\.7\.3\.7\.8\.5\.10$/.test(res['result-link'] || ''), res['result-link']);
-    ok('P: контакти в результатах', res['contact-name'] === 'Тест Мехамен' && /test\+checkup/.test(res['contact-email'] || ''));
+    ok('P: сфера як ключ, бал як значення', res['Позитивні емоції'] === '9.0 (зелена)', res['Позитивні емоції']);
+    ok('P: негативні емоції', res['Негативні емоції'] === '3.0 (жовта)', res['Негативні емоції']);
+    ok('P: 8 сфер у сабміті', ['Позитивні емоції', 'Залученість', 'Стосунки', 'Сенс', 'Досягнення', "Здоров'я", 'Негативні емоції', 'Самотність'].every((k) => k in res), Object.keys(res).join(','));
+    ok('P: технічних ключів немає', !('result-1' in res) && !('total-score' in res) && !('stage' in res) && !('answers-json' in res) && !('result-link' in res), Object.keys(res).join(','));
+    ok('P: посилання на результат веде на цей тест з відповідями', /\/checkup\/personal\?r=7\.5\.9\.3\.8\.4\.10\.6\.9\.6\.2\.5\.8\.2\.9\.4\.7\.3\.7\.8\.5\.10$/.test(res['Посилання на результат'] || ''), res['Посилання на результат']);
+    ok('P: контакти в результатах', res['Імʼя'] === 'Тест Мехамен' && /test\+checkup/.test(res['Email'] || '') && /Особистий/.test(res['Чек-ап'] || ''));
 
     // ---- блоки з документа клієнтки під результатом ----
     const outro = page.locator('[data-result="outro"]');
@@ -192,6 +197,19 @@ async function answerAll(page, values, milestoneAt, tag) {
     await page.waitForTimeout(800);
     ok('R: нічого не відправлено', submissions.length === 0, 'submissions=' + submissions.length);
     ok('R: кнопка друку є', await page.locator('[data-result="print"]').isVisible());
+
+    // ---- друк: addons збирає A4-сторінки на beforeprint і повертає DOM на afterprint ----
+    await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+    ok('R: друк збирає 3 сторінки', (await page.locator('[data-print="page"]').count()) === 3, 'got ' + (await page.locator('[data-print="page"]').count()));
+    ok('R: 8 плиток на першій сторінці друку', (await page.locator('[data-print="page"]:first-child [data-result="sphere-row"]').count()) === 8);
+    ok('R: у карті друку бали з зонами', (await page.locator('[data-print="wrap"] [data-outro-map] tr[class*="is-zone"]').count()) === 8);
+    ok('R: логотип і дата в шапці друку', (await page.locator('[data-print="head"]').count()) === 3 && /Check-up добробуту · \d{1,2} /.test(await page.locator('[data-print="meta"]').first().innerText()));
+    ok('R: контакт у друці', (await page.locator('[data-print="pill"]').innerText()).includes('hi@rozumiu.ua'));
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    ok('R: після друку DOM відновлено', (await page.locator('[data-print="wrap"]').count()) === 0
+      && (await page.locator('[data-quiz="result"].is-active [data-result="rows"] [data-result="sphere-row"]').count()) === 8
+      && (await page.locator('[data-quiz="result"].is-active [data-result="outro"] > [data-outro]').count()) === 5
+      && (await page.locator('[data-quiz="result"].is-active > h2').count()) === 1);
     await page.close();
   }
 
@@ -208,8 +226,9 @@ async function answerAll(page, values, milestoneAt, tag) {
     await page.click('[data-quiz="lead-form"] input[type="submit"]');
     await page.locator('[data-quiz="question"].is-active').waitFor({ timeout: 8000 });
     const lead = parseBody(submissions[0] && submissions[0].body);
-    ok('T: position у payload', lead.position === 'HR Director');
-    ok('T: checkup-name team', /Командний/.test(lead['checkup-name'] || ''));
+    ok('T: «Посада» у payload', lead['Посада'] === 'HR Director', Object.keys(lead).join(','));
+    ok('T: «Чек-ап» team', /Командний/.test(lead['Чек-ап'] || ''));
+    ok('T: службових полів немає', !('stage' in lead) && !('consent' in lead) && !('website' in lead) && !('position' in lead));
 
     const qCount = await page.locator('[data-quiz="question"]').count();
     ok('T: 20 тверджень', qCount === 20, 'got ' + qCount);
@@ -241,15 +260,24 @@ async function answerAll(page, values, milestoneAt, tag) {
 
     await page.waitForTimeout(1200);
     const res = parseBody(submissions[1] && submissions[1].body);
-    ok('T: total-score у payload', res['total-score'] === '80 із 80', res['total-score']);
-    ok('T: band-title у payload', res['band-title'] === 'Висока ймовірність, що команда працює в умовах тривалого психологічного навантаження');
-    ok('T: result-1 відсутній', !('result-1' in res));
+    ok('T: «Загальний бал» у payload', res['Загальний бал'] === '80 із 80', res['Загальний бал']);
+    ok('T: «Рівень» у payload', res['Рівень'] === 'Висока ймовірність, що команда працює в умовах тривалого психологічного навантаження', res['Рівень']);
+    ok('T: сфер і технічних ключів немає', !Object.keys(res).some((k) => /^result-/.test(k) || k === 'stage' || k === 'total-score' || k === 'Позитивні емоції'), Object.keys(res).join(','));
+    ok('T: посилання на результат', /\/checkup\/team\?r=/.test(res['Посилання на результат'] || ''), res['Посилання на результат']);
+
+    // ---- друк командного: 2 сторінки, бал у першій ----
+    await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+    ok('T: друк збирає 2 сторінки', (await page.locator('[data-print="page"]').count()) === 2, 'got ' + (await page.locator('[data-print="page"]').count()));
+    ok('T: загальний бал на першій сторінці друку', (await page.locator('[data-print="page"]:first-child [data-result="total-score"]').innerText()).trim() === '80 із 80');
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    ok('T: після друку DOM відновлено', (await page.locator('[data-print="wrap"]').count()) === 0 && (await page.locator('[data-quiz="result"][data-result-type="team"] [data-outro]').count()) === 3 && (await page.locator('[data-quiz="result"][data-result-type="team"] [data-result="total-score"]').count()) === 1);
     await page.close();
   }
 
   // ---------- MOBILE (390×844) швидкий прохід ----------
   {
     const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    if (process.env.ADDON_FILE) await mctx.addInitScript({ path: process.env.ADDON_FILE });
     const submissions = [];
     const page = await mctx.newPage();
     await page.route('**/api/v1/form/**', async (r) => { submissions.push(1); await r.fulfill({ status: 200, contentType: 'application/json', body: '{"msg":"ok","code":200}' }); });
