@@ -22,13 +22,15 @@ const item = (o) => `
   <img data-popup-field="image" src="https://cdn.prod.website-files.com/66c4727995c0791bec5a55dc/68f764d8b403cc05b61ab6b6_image%207.webp" loading="lazy" alt="">
 </div>`;
 
-const html = (lang) => `<!doctype html><html lang="${lang}"><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;font-family:Arial"><a href="#" id="first">first</a><div style="height:3000px">page</div>
-<div class="w-dyn-list" style="display:none"><div role="list" class="w-dyn-items">
+const dataList = () => `<div class="w-dyn-list popup-data" style="display:none"><div role="list" class="w-dyn-items">
 ${item({ title: 'Що насправді відбувається', accent: 'з вашою командою?', text: 'Короткий чек-ап допоможе подивитися на стан команди.', button: 'Пройти командний чек-ап', link: '/checkup/team', pages: '/, /education, /webinars, /about', color: 'Blue' })}
 ${item({ title: 'Як ваші справи', accent: 'з ресурсом?', text: 'Пройдіть короткий чек-ап особистого добробуту.', button: 'Пройти чек-ап', link: '/checkup/personal', pages: '/blog\n/blog/*\n/team\n/vacansies\n/faq', color: 'Yellow' })}
-</div></div>
+</div></div>`;
+const html = (lang, withData) => `<!doctype html><html lang="${lang}"><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;font-family:Arial"><a href="#" id="first">first</a><div style="height:3000px">page</div>
+${withData ? dataList() : ''}
 <script>${SCRIPT}</script></body></html>`;
+let dataFetches = 0;
 
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -36,19 +38,23 @@ ${item({ title: 'Як ваші справи', accent: 'з ресурсом?', te
   await ctx.route('https://rozumiu.webflow.io/**', (route) => {
     const u = new URL(route.request().url());
     const lang = u.pathname.startsWith('/en') ? 'en' : 'uk';
-    route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html(lang) });
+    if (u.pathname === '/popup-data') dataFetches++;
+    route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html(lang, u.pathname === '/popup-data') });
   });
   const page = await ctx.newPage();
   await page.clock.install();
   const B = 'https://rozumiu.webflow.io';
   const open = async (p) => { await page.goto(B + p); };
-  const popupTitle = () => page.evaluate(() => { const t = document.querySelector('.rzp-title'); return t ? t.textContent : null; });
+  const popupTitle = async (wait = true) => {
+    if (wait) { try { await page.waitForSelector('.rzp-title', { timeout: 3000 }); } catch (e) { /* none */ } }
+    return page.evaluate(() => { const t = document.querySelector('.rzp-title'); return t ? t.textContent : null; });
+  };
   const clear = () => page.evaluate(() => localStorage.clear());
 
   // 1. blog article, before and after 10 s
   await open('/blog/some-article'); await clear(); await open('/blog/some-article');
   await page.clock.runFor(9000);
-  ok('no popup before 10 s', (await popupTitle()) === null);
+  ok('no popup before 10 s', (await popupTitle(false)) === null);
   await page.clock.runFor(1500);
   ok('personal popup on blog article after 10 s', (await popupTitle()) === 'Як ваші справиз ресурсом?', await popupTitle());
   const info = await page.evaluate(() => ({
@@ -71,6 +77,8 @@ ${item({ title: 'Як ваші справи', accent: 'з ресурсом?', te
   await page.keyboard.press('Escape');
   ok('Escape closes', (await page.evaluate(() => !document.querySelector('.rzp'))));
   ok('scroll restored', (await page.evaluate(() => document.documentElement.style.overflow)) === '');
+
+  ok('data fetched from /popup-data', dataFetches >= 1, dataFetches);
 
   // 2. repeat within 7 days
   await open('/'); await page.clock.runFor(11000);
@@ -120,7 +128,7 @@ ${item({ title: 'Як ваші справи', accent: 'з ресурсом?', te
 
   // 7. mobile
   await page.setViewportSize({ width: 390, height: 844 });
-  await clear(); await open('/blog?popup-test'); await page.clock.runFor(1200);
+  await clear(); await open('/blog?popup-test'); await page.clock.runFor(1200); await popupTitle();
   const m = await page.evaluate(() => ({
     cardW: document.querySelector('.rzp-card').getBoundingClientRect().width,
     btnW: document.querySelector('.rzp-btn').getBoundingClientRect().width,
@@ -131,9 +139,11 @@ ${item({ title: 'Як ваші справи', accent: 'з ресурсом?', te
   ok('mobile button full width', Math.round(m.btnW) === 326, m.btnW);
   ok('mobile close 48', Math.round(m.closeW) === 48, m.closeW);
   ok('no horizontal scroll', m.scrollW <= 390, m.scrollW);
+  await page.waitForTimeout(600);
   await page.screenshot({ path: path.join(__dirname, 'popup-local-390.png') });
   await page.setViewportSize({ width: 1440, height: 900 });
-  await clear(); await open('/?popup-test'); await page.clock.runFor(1200);
+  await clear(); await open('/?popup-test'); await page.clock.runFor(1200); await popupTitle();
+  await page.waitForTimeout(600);
   await page.screenshot({ path: path.join(__dirname, 'popup-local-1440.png') });
 
   await browser.close();

@@ -1,7 +1,9 @@
-/*! Rozumiu check-up popups v2.0.0 */
-/* Content lives in the CMS collection "Popups" and is rendered site-wide as hidden data
- * ([data-popup-item] with [data-popup-field] children). This script picks the popup for
- * the current page and builds the dialog from that data.
+/*! Rozumiu check-up popups v2.1.0 */
+/* Content lives in the CMS collection "Popups". Webflow can't put a CMS list into the shared
+ * footer component, so the list is rendered on the system page /popup-data as hidden data
+ * ([data-popup-item] with [data-popup-field] children). After the delay this script reads that
+ * page (or the same markup on the current page), picks the popup for the current page and builds
+ * the dialog. The data is cached per tab for 10 minutes.
  * Rules (approved 17.09.2026):
  *  - shows after 10 s on a matching page, Ukrainian locale only, never on check-up pages;
  *  - at most one popup per 7 days per browser, shared by all popups;
@@ -17,6 +19,9 @@
   var REPEAT_DAYS = 7;
   var QUIET_DAYS = 30;
   var DELAY_MS = 10000;
+  var DATA_URL = '/popup-data';
+  var CACHE_KEY = 'rozumiu-popup-data';
+  var CACHE_MS = 10 * 60 * 1000;
 
   function readNum(k) { try { return parseInt(localStorage.getItem(k), 10) || 0; } catch (e) { return 0; } }
   function writeNum(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) { /* private mode */ } }
@@ -60,10 +65,50 @@
     if (!el) return '';
     if (name === 'image') {
       var img = el.tagName === 'IMG' ? el : el.querySelector('img');
-      return img ? (img.getAttribute('src') || '') : '';
+      var src = img ? (img.getAttribute('src') || '') : '';
+      return /^https?:\/\//.test(src) ? src : '';
     }
     if (el.classList.contains('w-dyn-bind-empty')) return '';
     return (el.textContent || '').trim();
+  }
+
+  function parseItems(root) {
+    var nodes = root.querySelectorAll('[data-popup-item]');
+    var out = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var it = nodes[i];
+      out.push({
+        title: field(it, 'title'),
+        accent: field(it, 'accent'),
+        text: field(it, 'text'),
+        button: field(it, 'button'),
+        link: field(it, 'link'),
+        pages: field(it, 'pages'),
+        image: field(it, 'image'),
+        color: field(it, 'color')
+      });
+    }
+    return out;
+  }
+
+  function loadItems(test, done) {
+    var local = parseItems(document);
+    if (local.length) { done(local); return; }
+    if (!test) {
+      try {
+        var cached = JSON.parse(sessionStorage.getItem(CACHE_KEY) || 'null');
+        if (cached && Date.now() - cached.t < CACHE_MS && cached.items) { done(cached.items); return; }
+      } catch (e) { /* no cache */ }
+    }
+    if (!window.fetch || !window.DOMParser) { done([]); return; }
+    fetch(DATA_URL, { credentials: 'omit' })
+      .then(function (r) { return r.ok ? r.text() : ''; })
+      .then(function (html) {
+        var items = html ? parseItems(new DOMParser().parseFromString(html, 'text/html')) : [];
+        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), items: items })); } catch (e) { /* ignore */ }
+        done(items);
+      })
+      .catch(function () { done([]); });
   }
 
   var CSS = '' +
@@ -182,23 +227,15 @@
       if (now - readNum(KEY_LAST) < REPEAT_DAYS * DAY) return;
     }
 
-    var items = document.querySelectorAll('[data-popup-item]');
-    for (var i = 0; i < items.length; i++) {
-      var it = items[i];
-      if (!pageMatches(p, field(it, 'pages'))) continue;
-      var data = {
-        title: field(it, 'title'),
-        accent: field(it, 'accent'),
-        text: field(it, 'text'),
-        button: field(it, 'button'),
-        link: field(it, 'link'),
-        image: field(it, 'image'),
-        color: field(it, 'color')
-      };
-      if (!data.title) return;
-      setTimeout(function () { show(data, test); }, test ? 1000 : DELAY_MS);
-      return;
-    }
+    setTimeout(function () {
+      loadItems(test, function (items) {
+        for (var i = 0; i < items.length; i++) {
+          if (!pageMatches(p, items[i].pages)) continue;
+          if (items[i].title) show(items[i], test);
+          return;
+        }
+      });
+    }, test ? 1000 : DELAY_MS);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
