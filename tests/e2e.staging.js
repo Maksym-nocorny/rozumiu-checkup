@@ -2,15 +2,33 @@
 /* E2E по staging: перехоплюємо Webflow form endpoint (нічого не летить у Forms/Make),
  * проходимо обидва тести, звіряємо скоринг і payload обох сабмітів.
  * Payload-ключі очікуються вже людські (addons v1.3.6: src/addons.js, підключений на сторінці);
- * до публікації додаток можна підкинути з файла: ADDON_FILE=src/addons.js node tests/e2e.staging.js */
+ * до публікації додаток можна підкинути з файла: ADDON_FILE=src/addons.js node tests/e2e.staging.js
+ * SIZE_CONFIG=1 підкладає ui.companySize з fixtures/team.json у конфіг сторінки, поки CMS не оновлено.
+ * BASE=https://www.rozumiu.ua — прогін проти бойового сайту (форми й так замокані). */
 const { chromium } = require('playwright-core');
 const assert = require('assert');
+const SIZE = require('../fixtures/team.json').ui.companySize;
 
-const BASE = 'https://rozumiu.webflow.io';
+const BASE = process.env.BASE || 'https://rozumiu.webflow.io';
 const results = [];
 function ok(name, cond, extra) {
   results.push({ name, pass: !!cond, extra: extra || '' });
   if (!cond) console.error('FAIL:', name, extra || '');
+}
+
+async function prepareContext(ctx) {
+  if (process.env.SIZE_CONFIG) {
+    // раніше за ADDON_FILE: слухачі DOMContentLoaded спрацьовують у порядку реєстрації
+    await ctx.addInitScript((size) => {
+      document.addEventListener('DOMContentLoaded', () => {
+        const n = document.querySelector('[data-quiz="config"]');
+        if (!n) return;
+        const c = JSON.parse(n.textContent);
+        if (c.type === 'team') { c.ui.companySize = size; n.textContent = JSON.stringify(c); }
+      });
+    }, SIZE);
+  }
+  if (process.env.ADDON_FILE) await ctx.addInitScript({ path: process.env.ADDON_FILE });
 }
 
 async function preparePage(ctx, submissions) {
@@ -41,7 +59,7 @@ function parseBody(body) {
 }
 
 async function fillLead(page, { position } = {}) {
-  await page.fill('[data-quiz="lead-form"] [name="contact-name"]', 'Тест Мехамен');
+  await page.fill('[data-quiz="lead-form"] [name="contact-name"]', 'TEST');
   await page.fill('[data-quiz="lead-form"] [name="phone"]', '+380501112233');
   await page.fill('[data-quiz="lead-form"] [name="contact-email"]', 'test+checkup@example.com');
   await page.fill('[data-quiz="lead-form"] [name="company"]', 'QA Dispatch');
@@ -70,7 +88,7 @@ async function answerAll(page, values, milestoneAt, tag) {
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  if (process.env.ADDON_FILE) await ctx.addInitScript({ path: process.env.ADDON_FILE });
+  await prepareContext(ctx);
 
   // ---------- PERSONAL ----------
   {
@@ -82,6 +100,7 @@ async function answerAll(page, values, milestoneAt, tag) {
     ok('P: quiz схований', !(await page.locator('[data-quiz="screen-quiz"]').isVisible()));
     ok('P: заголовок з CMS', (await page.locator('[data-quiz="root"] h1').innerText()).includes('Яким зараз відчувається'));
     ok('P: посада схована', !(await page.locator('[data-quiz="position-wrap"]').isVisible()));
+    ok('P: списку кількості співробітників немає', (await page.locator('[name="company-size"]').count()) === 0);
 
     // невалідний email блокується браузером
     await fillLead(page);
@@ -96,7 +115,7 @@ async function answerAll(page, values, milestoneAt, tag) {
     ok('P: лід-сабміт 1 шт', submissions.length === 1);
     const lead = parseBody(submissions[0] && submissions[0].body);
     ok('P: «Чек-ап» у ліді', /Особистий/.test(lead['Чек-ап'] || ''), JSON.stringify(lead).slice(0, 200));
-    ok('P: контакти під людськими ключами', lead['Імʼя'] === 'Тест Мехамен' && /test\+checkup/.test(lead['Email'] || '') && lead['Телефон'] === '+380501112233' && lead['Компанія'] === 'QA Dispatch', Object.keys(lead).join(','));
+    ok('P: контакти під людськими ключами', lead['Імʼя'] === 'TEST' && /test\+checkup/.test(lead['Email'] || '') && lead['Телефон'] === '+380501112233' && lead['Компанія'] === 'QA Dispatch', Object.keys(lead).join(','));
     ok('P: службових полів немає (stage/consent/website/порожня посада)', !('stage' in lead) && !('consent' in lead) && !('website' in lead) && !('position' in lead) && !('Посада' in lead), Object.keys(lead).join(','));
     ok('P: згода лишилась у формі після сабміту', await page.locator('[data-quiz="lead-form"] [name="consent"]').count() === 1);
 
@@ -158,7 +177,7 @@ async function answerAll(page, values, milestoneAt, tag) {
     ok('P: 8 сфер у сабміті', ['Позитивні емоції', 'Залученість', 'Стосунки', 'Сенс', 'Досягнення', "Здоров'я", 'Негативні емоції', 'Самотність'].every((k) => k in res), Object.keys(res).join(','));
     ok('P: технічних ключів немає', !('result-1' in res) && !('total-score' in res) && !('stage' in res) && !('answers-json' in res) && !('result-link' in res), Object.keys(res).join(','));
     ok('P: посилання на результат веде на цей тест з відповідями', /\/checkup\/personal\?r=7\.5\.9\.3\.8\.4\.10\.6\.9\.6\.2\.5\.8\.2\.9\.4\.7\.3\.7\.8\.5\.10$/.test(res['Посилання на результат'] || ''), res['Посилання на результат']);
-    ok('P: контакти в результатах', res['Імʼя'] === 'Тест Мехамен' && /test\+checkup/.test(res['Email'] || '') && /Особистий/.test(res['Чек-ап'] || ''));
+    ok('P: контакти в результатах', res['Імʼя'] === 'TEST' && /test\+checkup/.test(res['Email'] || '') && /Особистий/.test(res['Чек-ап'] || ''));
 
     // ---- блоки з документа клієнтки під результатом ----
     const outro = page.locator('[data-result="outro"]');
@@ -222,11 +241,24 @@ async function answerAll(page, values, milestoneAt, tag) {
     ok('T: посада видима', await page.locator('[data-quiz="position-wrap"]').isVisible());
     ok('T: посада required', await page.locator('[name="position"]').evaluate((el) => el.required));
 
+    const sizeSelect = page.locator('[data-quiz="lead-form"] [name="company-size"]');
+    ok('T: список кількості видно', await sizeSelect.isVisible());
+    ok('T: список required', await sizeSelect.evaluate((el) => el.required));
+    ok('T: підпис списку з конфігу', (await page.locator('[data-quiz="company-size-wrap"] label').innerText()).trim() === SIZE.label);
+    ok('T: варіанти списку з конфігу', JSON.stringify(await sizeSelect.locator('option').allTextContents()) === JSON.stringify([SIZE.placeholder, ...SIZE.options]));
+    ok('T: список між посадою і згодою', await page.locator('[data-quiz="company-size-wrap"]').evaluate((el) => el.previousElementSibling.getAttribute('data-quiz') === 'position-wrap' && el.nextElementSibling.getAttribute('data-quiz') === 'consent-wrap'));
+
     await fillLead(page, { position: 'HR Director' });
+    await page.click('[data-quiz="lead-form"] input[type="submit"]');
+    await page.waitForTimeout(700);
+    ok('T: без вибору у списку форма не йде', submissions.length === 0, 'got ' + submissions.length);
+    await sizeSelect.selectOption(SIZE.options[1]);
     await page.click('[data-quiz="lead-form"] input[type="submit"]');
     await page.locator('[data-quiz="question"].is-active').waitFor({ timeout: 8000 });
     const lead = parseBody(submissions[0] && submissions[0].body);
     ok('T: «Посада» у payload', lead['Посада'] === 'HR Director', Object.keys(lead).join(','));
+    ok('T: кількість співробітників у заявці', lead[SIZE.key] === SIZE.options[1], Object.keys(lead).join(','));
+    ok('T: технічного ключа списку немає', !('company-size' in lead));
     ok('T: «Чек-ап» team', /Командний/.test(lead['Чек-ап'] || ''));
     ok('T: службових полів немає', !('stage' in lead) && !('consent' in lead) && !('website' in lead) && !('position' in lead));
 
@@ -264,6 +296,9 @@ async function answerAll(page, values, milestoneAt, tag) {
     ok('T: «Рівень» у payload', res['Рівень'] === 'Висока ймовірність, що команда працює в умовах тривалого психологічного навантаження', res['Рівень']);
     ok('T: сфер і технічних ключів немає', !Object.keys(res).some((k) => /^result-/.test(k) || k === 'stage' || k === 'total-score' || k === 'Позитивні емоції'), Object.keys(res).join(','));
     ok('T: посилання на результат', /\/checkup\/team\?r=/.test(res['Посилання на результат'] || ''), res['Посилання на результат']);
+    ok('T: кількість співробітників у результатах', res[SIZE.key] === SIZE.options[1], Object.keys(res).join(','));
+    const resKeys = Object.keys(res);
+    ok('T: у результатах кількість одразу після Email', resKeys[resKeys.indexOf('Email') + 1] === SIZE.key, resKeys.join(','));
 
     // ---- друк командного: 2 сторінки, бал у першій ----
     await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
@@ -277,7 +312,7 @@ async function answerAll(page, values, milestoneAt, tag) {
   // ---------- MOBILE (390×844) швидкий прохід ----------
   {
     const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-    if (process.env.ADDON_FILE) await mctx.addInitScript({ path: process.env.ADDON_FILE });
+    await prepareContext(mctx);
     const submissions = [];
     const page = await mctx.newPage();
     await page.route('**/api/v1/form/**', async (r) => { submissions.push(1); await r.fulfill({ status: 200, contentType: 'application/json', body: '{"msg":"ok","code":200}' }); });

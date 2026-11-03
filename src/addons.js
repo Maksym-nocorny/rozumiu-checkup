@@ -1,7 +1,8 @@
-/*! Rozumiu check-up addons v1.3.6
+/*! Rozumiu check-up addons v1.4.2
  * Loaded from the Checkups Template page custom code (no registered-script update needed).
  * 1) Form payload: human-readable field keys, no service fields (stage/consent/honeypot/empty position).
  * 2) Print: rebuilds the result into A4 pages (logo, date, tiles, legend, map, writing lines, contact card).
+ * 3) Lead form dropdown from config.ui.companySize (team check-up only); its answer goes into both forms.
  */
 (function () {
   'use strict';
@@ -23,6 +24,9 @@
   var LEAD_KEYS = { 'contact-name': 'Імʼя', 'contact-email': 'Email', 'phone': 'Телефон', 'company': 'Компанія', 'position': 'Посада', 'checkup-name': 'Чек-ап' };
   var RESULT_KEYS = { 'checkup-name': 'Чек-ап', 'contact-name': 'Імʼя', 'contact-email': 'Email', 'total-score': 'Загальний бал', 'band-title': 'Рівень', 'overall': 'Загальне благополуччя', 'result-link': 'Посилання на результат' };
   var DROP_NAMES = ['stage', 'consent', 'website'];
+  var SIZE_NAME = 'company-size';
+  var sizeKey = '';   // payload key of the dropdown; empty = this check-up has no dropdown
+  var sizeValue = ''; // the results form is a separate submission, so the lead answer is kept for it
 
   // Capture phase on document runs before webflow.js serializes the form (it keys fields by data-name).
   document.addEventListener('submit', function (e) {
@@ -47,6 +51,8 @@
     if (kind === 'Checkup Lead') {
       var pos = form.querySelector('[name="position"]');
       if (pos && (pos.disabled || !String(pos.value || '').trim())) drop(pos);
+      var size = form.querySelector('[name="' + SIZE_NAME + '"]');
+      if (size) sizeValue = size.value;
     } else {
       // "Сфера: 7.3 (зелена)" -> key "Сфера", value "7.3 (зелена)"
       qa('input[name^="result-"]', form).forEach(function (f) {
@@ -54,16 +60,48 @@
         var v = String(f.value || ''), i = v.indexOf(': ');
         if (i > 0) { f.setAttribute('data-name', v.slice(0, i)); f.value = v.slice(i + 2); }
       });
+      if (sizeKey && sizeValue && !form.querySelector('[name="' + SIZE_NAME + '"]')) {
+        var sent = el('input', { type: 'hidden', name: SIZE_NAME, 'data-name': sizeKey, value: sizeValue });
+        var mail = form.querySelector('[name="contact-email"]');
+        if (mail) mail.parentNode.insertBefore(sent, mail.nextSibling); else form.appendChild(sent);
+      }
     }
     // put the removed inputs back right after webflow.js has read the form (keeps validation on re-submit)
     if (removed.length) setTimeout(function () { removed.reverse().forEach(function (r) { r.parent.insertBefore(r.el, r.next); }); }, 0);
   }, true);
 
   /* ---------------------------------------------------------------- */
+  /* 1a. Lead form dropdown                                            */
+  /* ---------------------------------------------------------------- */
+  // A check-up gets the field only if its CMS config has ui.companySize (team has, personal has not).
+  // Label, answers and the key in Forms live there, so changing them needs no release.
+  function buildCompanySize() {
+    var node = q(ROOT_SEL + ' [data-quiz="config"]');
+    var form = q('[data-quiz="lead-form"] form');
+    if (!node || !form || q('[name="' + SIZE_NAME + '"]', form)) return;
+    var cfg;
+    try { cfg = (JSON.parse(node.textContent).ui || {}).companySize; } catch (e) { return; } // quiz.js reports a broken config
+    if (!cfg || !cfg.label || !Array.isArray(cfg.options) || !cfg.options.length) return;
+    var before = q('[data-quiz="consent-wrap"]', form) || q('input[type="submit"]', form);
+    if (!before) return;
+    sizeKey = cfg.key || cfg.label;
+    var select = el('select', { id: SIZE_NAME, name: SIZE_NAME, 'data-name': sizeKey, required: 'required', 'class': 'text-field w-select' });
+    select.appendChild(el('option', { value: '' }, esc(cfg.placeholder || '')));
+    cfg.options.forEach(function (o) { select.appendChild(el('option', { value: o }, esc(o))); });
+    var wrap = el('div', { 'data-quiz': 'company-size-wrap' });
+    wrap.appendChild(el('label', { 'for': SIZE_NAME, 'class': 'field-label' }, esc(cfg.label)));
+    wrap.appendChild(select);
+    before.parentNode.insertBefore(wrap, before);
+  }
+
+  /* ---------------------------------------------------------------- */
   /* 2. Print layout                                                   */
   /* ---------------------------------------------------------------- */
   var PRINT_CSS = [
     '[data-quiz="hp-wrap"]{display:none!important}',
+    '[data-quiz="lead-form"] select.text-field{width:100%;height:38px;padding:0 24px 0 0;font-family:inherit;font-size:16px;color:#000;background:transparent url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'8\' fill=\'none\'%3E%3Cpath d=\'M1 1.5l5 5 5-5\' stroke=\'%23000\' stroke-width=\'1.5\'/%3E%3C/svg%3E") no-repeat right 2px center;-webkit-appearance:none;appearance:none;cursor:pointer}',
+    '[data-quiz="lead-form"] select.text-field:invalid{color:#999}',
+    '[data-quiz="lead-form"] select.text-field option{color:#000}',
     '@page{size:A4;margin:0}',
     '@media print{',
     'html,body{margin:0!important;padding:0!important;background:#fff!important;height:auto!important;min-height:0!important;display:block!important}',
@@ -334,6 +372,8 @@
 
   function init() {
     injectStyles();
+    // a bad config must not cost the print layout registered below
+    try { buildCompanySize(); } catch (e) { console.error('[addons] company size', e); }
     window.addEventListener('beforeprint', buildPrint);
     window.addEventListener('afterprint', restorePrint);
     if (window.matchMedia) {
@@ -346,5 +386,5 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 
-  window.RozumiuCheckupAddons = { version: '1.3.6', buildPrint: buildPrint, restorePrint: restorePrint };
+  window.RozumiuCheckupAddons = { version: '1.4.2', buildPrint: buildPrint, restorePrint: restorePrint };
 })();

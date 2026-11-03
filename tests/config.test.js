@@ -12,6 +12,11 @@ const team = load('team');
 let checks = 0;
 const ok = (name, cond) => { assert.ok(cond, name); checks++; };
 
+// --- список кількості співробітників: лише в командному, форма ключа ----------
+const size = team.ui.companySize;
+ok('team: список має підпис, ключ і варіанти', !!size && !!size.label && !!size.key && Array.isArray(size.options) && size.options.length > 1);
+ok('personal: списку кількості співробітників немає', !personal.ui.companySize);
+
 // --- командний: діапазони суцільні, стеля збігається -----------------------
 const teamMax = (team.questionsTotal - (team.uncounted || []).length) * team.scale.max;
 ok('team: стеля 80', teamMax === 80);
